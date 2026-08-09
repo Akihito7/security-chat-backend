@@ -1,0 +1,34 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String                    @id @default(uuid()) @db.Uuid
+  username      String                    @unique
+  passwordHash  String
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  conversations ConversationParticipant[]
+}
+
+model Conversation {
+  id           String                    @id @default(uuid()) @db.Uuid
+  createdAt    DateTime                  @default(now())
+  participants ConversationParticipant[]
+}
+
+model ConversationParticipant {
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  joinedAt       DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+}
