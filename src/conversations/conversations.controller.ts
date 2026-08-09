@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../guards/auth.guard';
 import { JwtAuthGuard } from '../guards/auth.guard';
 import { ConversationsService } from './conversations.service';
@@ -8,6 +8,11 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 @UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) {}
+
+  @Get()
+  findAll(@Req() request: AuthenticatedRequest) {
+    return this.conversationsService.findAll(request.user.sub);
+  }
 
   @Post()
   create(

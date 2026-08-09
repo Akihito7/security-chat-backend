@@ -9,6 +9,39 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ConversationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAll(currentUserId: string) {
+    const conversations = await this.prisma.conversation.findMany({
+      where: {
+        participants: { some: { userId: currentUserId } },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        participants: {
+          where: { userId: { not: currentUserId } },
+          select: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return conversations.map((conversation) => ({
+      conversationId: conversation.id,
+      createdAt: conversation.createdAt,
+      participants: conversation.participants.map(({ user }) => ({
+        userId: user.id,
+        username: user.username,
+      })),
+    }));
+  }
+
   async create(username: string, currentUserId: string) {
     const targetUser = await this.prisma.user.findUnique({
       where: { username },
