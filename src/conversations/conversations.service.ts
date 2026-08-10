@@ -3,50 +3,89 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { ConversationsRepository } from './conversations.repository';
 
 @Injectable()
 export class ConversationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly conversationsRepository: ConversationsRepository,
+  ) {}
 
   async findAll(currentUserId: string) {
-    const conversations = await this.prisma.conversation.findMany({
-      where: {
-        participants: { some: { userId: currentUserId } },
-      },
-      select: {
-        id: true,
-        createdAt: true,
-        participants: {
-          where: { userId: { not: currentUserId } },
-          select: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
+    const conversations =
+      await this.conversationsRepository.findAll(currentUserId);
+
+    const conversationSummaries = conversations.map((conversation) => {
+      const [lastMessage] = conversation.messages;
+      const currentParticipant = conversation.participants.find(
+        ({ userId }) => userId === currentUserId,
+      );
+
+      return {
+        conversationId: conversation.id,
+        createdAt: conversation.createdAt,
+        participants: conversation.participants
+          .filter(({ userId }) => userId !== currentUserId)
+          .map(({ user }) => ({
+            userId: user.id,
+            username: user.username,
+          })),
+        lastMessage: lastMessage
+          ? {
+              content: lastMessage.content,
+              senderId: lastMessage.senderId,
+              senderUsername: lastMessage.sender.username,
+              sentAt: lastMessage.sentAt,
+              sentByCurrentUser: lastMessage.senderId === currentUserId,
+            }
+          : null,
+        hasUnreadMessages: Boolean(
+          lastMessage &&
+            lastMessage.senderId !== currentUserId &&
+            (!currentParticipant?.lastReadAt ||
+              lastMessage.sentAt > currentParticipant.lastReadAt),
+        ),
+      };
     });
 
-    return conversations.map((conversation) => ({
+    return conversationSummaries.sort((first, second) => {
+      const firstActivity = first.lastMessage?.sentAt ?? first.createdAt;
+      const secondActivity = second.lastMessage?.sentAt ?? second.createdAt;
+
+      return secondActivity.getTime() - firstActivity.getTime();
+    });
+  }
+
+  async findById(conversationId: string, currentUserId: string) {
+    const conversation = await this.conversationsRepository.findById(
+      conversationId,
+      currentUserId,
+    );
+
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return {
       conversationId: conversation.id,
       createdAt: conversation.createdAt,
       participants: conversation.participants.map(({ user }) => ({
         userId: user.id,
         username: user.username,
       })),
-    }));
+      messages: conversation.messages.map((message) => ({
+        messageId: message.id,
+        content: message.content,
+        senderId: message.senderId,
+        senderUsername: message.sender.username,
+        sentAt: message.sentAt,
+      })),
+    };
   }
 
   async create(username: string, currentUserId: string) {
-    const targetUser = await this.prisma.user.findUnique({
-      where: { username },
-      select: { id: true },
-    });
+    const targetUser =
+      await this.conversationsRepository.findUserByUsername(username);
 
     if (!targetUser) {
       throw new NotFoundException('User not found');
@@ -58,36 +97,20 @@ export class ConversationsService {
       );
     }
 
-    const existingConversation = await this.prisma.conversation.findFirst({
-      where: {
-        AND: [
-          { participants: { some: { userId: currentUserId } } },
-          { participants: { some: { userId: targetUser.id } } },
-          {
-            participants: {
-              every: { userId: { in: [currentUserId, targetUser.id] } },
-            },
-          },
-        ],
-      },
-      select: { id: true },
-    });
+    const existingConversation =
+      await this.conversationsRepository.findDirectConversation(
+        currentUserId,
+        targetUser.id,
+      );
 
     if (existingConversation) {
       return { conversationId: existingConversation.id };
     }
 
-    const conversation = await this.prisma.conversation.create({
-      data: {
-        participants: {
-          create: [
-            { userId: currentUserId, joinedAt: new Date() },
-            { userId: targetUser.id, joinedAt: new Date() },
-          ],
-        },
-      },
-      select: { id: true },
-    });
+    const conversation = await this.conversationsRepository.create(
+      currentUserId,
+      targetUser.id,
+    );
 
     return { conversationId: conversation.id };
   }

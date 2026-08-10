@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthenticatedRequest } from '../guards/auth.guard';
 import { JwtAuthGuard } from '../guards/auth.guard';
 import { ConversationsService } from './conversations.service';
@@ -12,6 +21,18 @@ export class ConversationsController {
   @Get()
   findAll(@Req() request: AuthenticatedRequest) {
     return this.conversationsService.findAll(request.user.sub);
+  }
+
+  @Get(':conversationId')
+  findById(
+    @Param('conversationId', new ParseUUIDPipe({ version: '4' }))
+    conversationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.conversationsService.findById(
+      conversationId,
+      request.user.sub,
+    );
   }
 
   @Post()
