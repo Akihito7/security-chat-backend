@@ -6,11 +6,12 @@ import {
   WebSocketGateway,
 } from '@nestjs/websockets';
 import type { Socket } from 'socket.io';
+import { allowedOrigins } from '../cors.config';
 import { ChatService } from './chat.service';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: allowedOrigins,
     credentials: true,
   },
 })

@@ -61,10 +61,12 @@ export class AuthController {
   }
 
   private cookieOptions() {
+    const isProduction = process.env.NODE_ENV === 'production';
+
     return {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax' as const,
+      secure: isProduction,
+      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
       path: '/',
     };
   }
